@@ -32,30 +32,34 @@ class SensorPodIdentifier:
 		# for img in image_files:
 		# 	image_topic = os.path.splitext(os.path.basename(img))[0]
 		# 	self.subscriber = rospy.Subscriber(SensorPodIdentifier.IMAGE_TOPIC, Image, self.callback)
-		self.subscriber = rospy.Subscriber("/pod_images/sensor_pod_0.jpg", Image, self.callback)
-		self.publisher = rospy.Publisher(SensorPodIdentifier.POD_LOCATION_TOPIC, PoseStamped, queue_size=10)
+		# self.subscriber = rospy.Subscriber("/sensor_pod_0.jpg", Image, self.callback)
+		self.publisher = rospy.Publisher(POD_LOCATION_TOPIC, PoseStamped, queue_size=10)
 		self.latest_image = None
 		self.bridge = CvBridge()
 
-	def callback(self, Image_data):
-		self.latest_image = self.bridge.imgmsg_to_cv2(Image_data, "bgr8")
+	def callback(self): #, Image_data):
+		# self.latest_image = self.bridge.imgmsg_to_cv2(Image_data, "bgr8")
+		self.latest_image = cv2.imread('sensor_pod_0.jpg')
+		print("got image")
+		#print(self.cd_color_segmentation(self.latest_image))
+		self.publish_sensor_pod_tip_pose()
 
 	def get_latest_image(self):
 		return self.latest_image
 
-	def image_print(self):
-			"""
-			Helper function to print out images, for debugging. Pass them in as a list.
-			Press any key to continue
-			"""
-			cv2.imshow("image", self.get_latest_image())
-			cv2.waitKey(0)
-			cv2.destroyAllWindows()
+	def image_print(self, img):
+		"""
+		Helper function to print out images, for debugging. Pass them in as a list.
+		Press any key to continue
+		"""
+		cv2.imshow("image", img)
+		cv2.waitKey(0)
+		cv2.destroyAllWindows()
 
 	def filter_contours(self, contours):
 		if len(contours) == 0:
 			return None
-		
+
 		return [contour for contour in contours if cv2.contourArea(contour) > 1000] # WILL NEED TO CHANGE
 
 	def get_largest_contour(self, contours):
@@ -90,15 +94,18 @@ class SensorPodIdentifier:
 		kernel = np.ones((7, 7), np.uint8)
 
 		filtered_img = cv2.dilate(cv2.erode(img, kernel, iterations=1), kernel, iterations=1)
+		print("filtered img")
 
 		#image_print(filtered_img)
 		hsv_img = cv2.cvtColor(filtered_img, cv2.COLOR_RGB2HSV)
 		mask = cv2.inRange(hsv_img, light_orange, dark_orange)
-		self.image_print(mask)
+		# self.image_print(mask)
 
 		# Find remaning contours, correspond to orange objects
 		contours = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
 		largest_contour = self.get_largest_contour(contours)
+
+		print("largest contour found")
 
 		# Draw boxes around the contours
 		x, y, w, h = cv2.boundingRect(largest_contour)
@@ -110,7 +117,7 @@ class SensorPodIdentifier:
 			boxes.append(((x, y), (x+w, y+h)))
 
 		return bounding_box
-	
+
 	def get_sensor_pod_tip_pose(self):
 		img = self.get_latest_image()
 		bounding_box = self.cd_color_segmentation(img)
@@ -119,7 +126,7 @@ class SensorPodIdentifier:
 		z = 1
 
 		return (x, y, z)
-		
+
 	def publish_sensor_pod_tip_pose(self):
 		pod_tip = self.get_sensor_pod_tip_pose()
 		pose_msg = PoseStamped()
@@ -132,6 +139,7 @@ class SensorPodIdentifier:
 		pose_msg.pose.orientation.z = 0.0
 		pose_msg.pose.orientation.w = 1.0
 
+		rospy.loginfo(pose_msg)
 		self.publisher.publish(pose_msg)
 
 
@@ -139,6 +147,7 @@ if __name__ == '__main__':
 
 	rospy.init_node('sensor_pod_identifier')
 	sensor_pod_identifier = SensorPodIdentifier()
+	sensor_pod_identifier.callback()
 	rospy.spin()
 
 	# image_subscriber = SensorPodIdentifier()

@@ -11,6 +11,7 @@ import os
 # from apriltag_ros import Detector
 #import apriltag
 from nav_msgs.msg import Odometry
+import tf
 
 #################### X-Y CONVENTIONS #########################
 # 0,0  X  > > > > >
@@ -192,38 +193,35 @@ class SensorPodIdentifier:
 	def object_callback(self, msg):
 		img = self.bridge.imgmsg_to_cv2(msg)
 		bounding_box = self.cd_color_segmentation(img)
-		x = (bounding_box[0][0]+bounding_box[1][0])/2
-		y = bounding_box[0][1]
-		z = -self.ground_dist
+		u = (bounding_box[0][0]+bounding_box[1][0])/2
+		v = bounding_box[0][1]
+		w = self.ground_dist
 
-        # Check if we have received the drone pose
-		if self.drone_pose is None:
-			rospy.logwarn('No drone pose received yet. Cannot transform object position.')
-			return
+        # Intrinsic matrix
+		K = np.array([[319.9988245765257, 0, 320.5],
+					[0, 319.9988245765257, 240.5],
+					[0, 0, 1]])
 
-        # Convert the position of the object to a numpy array
-		P_camera = np.array([x, y, z, 1.0]) #np.array([msg.point.x, msg.point.y, msg.point.z, 1.0])
+		# Extrinsic matrix
+		R_drone = tf.transformations.quaternion_matrix(self.drone_pose.orientation)  # 3x3 rotation matrix
+		z_rotation_matrix = tf.transformations.rotation_matrix(np.radians(45), (0, 0, 1))
+		R_cam_world = np.dot(R_drone, z_rotation_matrix)
+		
+		
+		t = [self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose.position.z]  # 3x1 translation vector
+		T = np.concatenate([R_cam_world, t], axis=1)
 
-        # Convert the quaternion orientation of the drone to a rotation matrix
-		q = self.drone_pose.orientation
-		r = np.array([
-            [1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
-            [2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
-            [2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
-        ])
+		# Normalize pixel coordinates
+		u_norm = (u - 320.5) / 319.9988245765257
+		v_norm = (v - 240.5) / 319.9988245765257
 
-        # Create a homogeneous transformation matrix from the rotation matrix
-		t = np.eye(4)
-		t[:3,:3] = r
+		# Direction vector in camera coordinates
+		P_c = np.array([u_norm, v_norm, 1])
+		P_c = P_c / np.linalg.norm(P_c)
 
-        # Transform the position of the object from the camera frame to the drone frame
-		P_drone = np.dot(np.linalg.inv(t), P_camera)
-		P_drone = P_drone[:3] / P_drone[3]
-		print(P_camera)
-
-        # Add the position of the drone in the world frame to get the position of the object in the world frame
-		P_drone_world = np.array([self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose	.position.z])
-		P_world = P_drone[:3] + P_drone_world
+		# 3D position in world coordinates
+		P_w = np.dot(np.linalg.inv(T), np.concatenate([P_c, [1]]))
+		P_world = P_w[:3]
 
 		# Create a PointStamped message for the position of the object in the drone frame
 		object_msg = PointStamped()
@@ -236,7 +234,58 @@ class SensorPodIdentifier:
 		# Publish the position of the object in the drone frame
 		self.publisher.publish(object_msg)
 
-		# rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world[0], P_world[1], P_world[2]))
+		rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world[0], P_world[1], P_world[2]))
+
+
+
+
+	# def object_callback(self, msg):
+	# 	img = self.bridge.imgmsg_to_cv2(msg)
+	# 	bounding_box = self.cd_color_segmentation(img)
+	# 	x = (bounding_box[0][0]+bounding_box[1][0])/2
+	# 	y = bounding_box[0][1]
+	# 	z = self.ground_dist
+
+    #     # Check if we have received the drone pose
+	# 	if self.drone_pose is None:
+	# 		rospy.logwarn('No drone pose received yet. Cannot transform object position.')
+	# 		return
+
+    #     # Convert the position of the object to a numpy array
+	# 	P_camera = np.array([x, y, z]) #np.array([msg.point.x, msg.point.y, msg.point.z, 1.0])
+
+    #     # Convert the quaternion orientation of the drone to a rotation matrix
+	# 	q = self.drone_pose.pose.orientation
+	# 	r = np.array([
+    #         [1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
+    #         [2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
+    #         [2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
+    #     ])
+
+    #     # Create a homogeneous transformation matrix from the rotation matrix
+	# 	t = np.eye(4)
+	# 	t[:3,:3] = r
+
+    #     # Transform the position of the object from the camera frame to the drone frame
+	# 	P_drone = np.dot(np.linalg.inv(t), P_camera)
+	# 	P_drone = P_drone[:3] / P_drone[3]
+
+    #     # Add the position of the drone in the world frame to get the position of the object in the world frame
+	# 	P_drone_world = np.array([self.drone_pose.pose.position.x, self.drone_pose.pose.position.y, self.drone_pose.pose.position.z])
+	# 	P_world = P_drone[:3] + P_drone_world
+
+	# 	# Create a PointStamped message for the position of the object in the drone frame
+	# 	object_msg = PointStamped()
+	# 	object_msg.header.frame_id = 'world'
+	# 	object_msg.header.stamp = rospy.Time.now()
+	# 	object_msg.point.x = P_world[0]
+	# 	object_msg.point.y = P_world[1]
+	# 	object_msg.point.z = P_world[2]
+
+	# 	# Publish the position of the object in the drone frame
+	# 	self.publisher.publish(object_msg)
+
+	# 	rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world[0], P_world[1], P_world[2]))
 
 
 	# def publish_sensor_pod_tip_pose(self):

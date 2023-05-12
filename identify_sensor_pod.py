@@ -4,7 +4,7 @@ import pdb
 import sys
 import rospy
 from sensor_msgs.msg import Image, Range
-from geometry_msgs.msg import PoseStamped, PointStamped
+from geometry_msgs.msg import PointStamped
 from cv_bridge import CvBridge
 import glob
 import os
@@ -36,7 +36,7 @@ class SensorPodIdentifier:
 		# 	image_topic = os.path.splitext(os.path.basename(img))[0]
 		# 	self.subscriber = rospy.Subscriber(SensorPodIdentifier.IMAGE_TOPIC, Image, self.callback)
 		self.image_subscriber = rospy.Subscriber("/front_cam/camera/image", Image, self.object_callback)
-		self.publisher = rospy.Publisher(POD_LOCATION_TOPIC, PoseStamped, queue_size=10)
+		self.publisher = rospy.Publisher(POD_LOCATION_TOPIC, PointStamped, queue_size=10)
 		self.subscriber = rospy.Subscriber('/ground_truth/state', Odometry, self.odom_callback)
 		self.range_sub = rospy.Subscriber('/sonar_height', Range, self.range_callback)
 		self.latest_image = None
@@ -135,7 +135,7 @@ class SensorPodIdentifier:
 		kernel = np.ones((7, 7), np.uint8)
 
 		filtered_img = cv2.dilate(cv2.erode(img, kernel, iterations=1), kernel, iterations=1)
-		print("filtered img")
+		# print("filtered img")
 
 		#image_print(filtered_img)
 		hsv_img = cv2.cvtColor(filtered_img, cv2.COLOR_RGB2HSV)
@@ -146,7 +146,7 @@ class SensorPodIdentifier:
 		contours = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
 		largest_contour = self.get_largest_contour(contours)
 
-		print("largest contour found")
+		# print("largest contour found")
 
 		# Draw boxes around the contours
 		x, y, w, h = cv2.boundingRect(largest_contour)
@@ -157,8 +157,8 @@ class SensorPodIdentifier:
 			x, y, w, h = cv2.boundingRect(c)
 			boxes.append(((x, y), (x+w, y+h)))
 
-		cv2.rectangle(self.latest_image, bounding_box[0], bounding_box[1], (0, 255, 0),2)
-		cv2.imwrite("found_pod.jpg", self.latest_image)
+		# cv2.rectangle(self.latest_image, bounding_box[0], bounding_box[1], (0, 255, 0),2)
+		# cv2.imwrite("found_pod.jpg", self.latest_image)
 		# cv2.waitKey(0)
 		# cv2.destroyAllWindows()
 
@@ -194,7 +194,7 @@ class SensorPodIdentifier:
 		bounding_box = self.cd_color_segmentation(img)
 		x = (bounding_box[0][0]+bounding_box[1][0])/2
 		y = bounding_box[0][1]
-		z = self.ground_dist
+		z = -self.ground_dist
 
         # Check if we have received the drone pose
 		if self.drone_pose is None:
@@ -202,10 +202,10 @@ class SensorPodIdentifier:
 			return
 
         # Convert the position of the object to a numpy array
-		P_camera = np.array([x, y, z]) #np.array([msg.point.x, msg.point.y, msg.point.z, 1.0])
+		P_camera = np.array([x, y, z, 1.0]) #np.array([msg.point.x, msg.point.y, msg.point.z, 1.0])
 
         # Convert the quaternion orientation of the drone to a rotation matrix
-		q = self.drone_pose.pose.orientation
+		q = self.drone_pose.orientation
 		r = np.array([
             [1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
             [2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
@@ -219,9 +219,10 @@ class SensorPodIdentifier:
         # Transform the position of the object from the camera frame to the drone frame
 		P_drone = np.dot(np.linalg.inv(t), P_camera)
 		P_drone = P_drone[:3] / P_drone[3]
+		print(P_camera)
 
         # Add the position of the drone in the world frame to get the position of the object in the world frame
-		P_drone_world = np.array([self.drone_pose.pose.position.x, self.drone_pose.pose.position.y, self.drone_pose.pose.position.z])
+		P_drone_world = np.array([self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose	.position.z])
 		P_world = P_drone[:3] + P_drone_world
 
 		# Create a PointStamped message for the position of the object in the drone frame
@@ -235,7 +236,7 @@ class SensorPodIdentifier:
 		# Publish the position of the object in the drone frame
 		self.publisher.publish(object_msg)
 
-		rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world[0], P_world[1], P_world[2]))
+		# rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world[0], P_world[1], P_world[2]))
 
 
 	# def publish_sensor_pod_tip_pose(self):

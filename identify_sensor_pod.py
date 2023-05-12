@@ -203,7 +203,7 @@ class SensorPodIdentifier:
 					[0, 0, 1]])
 
 		# Extrinsic matrix
-		R_drone = tf.transformations.quaternion_matrix(self.drone_pose.orientation)  # 3x3 rotation matrix
+		R_drone = tf.transformations.quaternion_matrix([self.drone_pose.orientation.x, self.drone_pose.orientation.y, self.drone_pose.orientation.z, self.drone_pose.orientation.w])  # 3x3 rotation matrix
 
 		# Define the y-axis rotation matrix
 		R_cam = np.array([[np.cos(np.pi/4), 0, np.sin(np.pi/4)],

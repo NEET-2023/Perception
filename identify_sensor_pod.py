@@ -211,9 +211,9 @@ class SensorPodIdentifier:
 									[-np.sin(np.pi/4), 0, np.cos(np.pi/4)]])
 
 		# Rotate the original rotation matrix about the y-axis
-		R_cam_world = np.dot(R_drone, R_cam)
-		
-		
+
+		R_cam_world = np.matmul(R_drone, np.hstack((R_cam, np.zeros((3,1)))))
+
 		t = [self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose.position.z] + [0.05, 0.0, -0.25]  # 3x1 translation vector
 		T = np.concatenate([R_cam_world, t], axis=1)
 

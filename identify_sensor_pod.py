@@ -4,10 +4,13 @@ import pdb
 import sys
 import rospy
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PointStamped
 from cv_bridge import CvBridge
 import glob
 import os
+# from apriltag_ros import Detector
+import apriltag
+from nav_msgs.msg import Odometry
 
 #################### X-Y CONVENTIONS #########################
 # 0,0  X  > > > > >
@@ -34,15 +37,46 @@ class SensorPodIdentifier:
 		# 	self.subscriber = rospy.Subscriber(SensorPodIdentifier.IMAGE_TOPIC, Image, self.callback)
 		# self.subscriber = rospy.Subscriber("/sensor_pod_0.jpg", Image, self.callback)
 		self.publisher = rospy.Publisher(POD_LOCATION_TOPIC, PoseStamped, queue_size=10)
+		self.subscriber = rospy.Subscriber('/ground_truth/state', Odometry, self.odom_callback)
 		self.latest_image = None
 		self.bridge = CvBridge()
+		self.drone_pose = None
+
+	def odom_callback(self, msg: Odometry) -> None:
+		"""
+        Saves in the odometry for the drone to conduct its planning
+
+        Parameters:
+        msg (Odometry): pose information of the drone
+
+        Returns:
+        None
+        """
+		self.drone_pose = msg.pose.pose
 
 	def callback(self): #, Image_data):
 		# self.latest_image = self.bridge.imgmsg_to_cv2(Image_data, "bgr8")
-		self.latest_image = cv2.imread('sensor_pod_0.jpg')
+		self.latest_image = cv2.imread('frame0003.jpg')
 		print("got image")
+
 		#print(self.cd_color_segmentation(self.latest_image))
 		self.publish_sensor_pod_tip_pose()
+
+	def image_callback(self, msg):
+		# Convert ROS image message to OpenCV image
+		cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+		# Convert image to grayscale
+		gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+		# Create April tag detector object
+		detector = Detector()
+		# Detect April tags in the image
+		tags = detector.detect(gray)
+		# Create April tag decoder object
+		decoder = apriltag.Detector()
+		# Decode the detected tag
+		tag_info = decoder.decode(gray, tags[0].tag_family)
+		# Print the tag ID
+		print("April tag ID:", tag_info[0].tag_id)
 
 	def get_latest_image(self):
 		return self.latest_image
@@ -89,8 +123,11 @@ class SensorPodIdentifier:
 			"""
 
 		# Create mask for orange cone. HSV threshods
-		light_orange = (40, 100, 105) #(70, 180, 150)
-		dark_orange = (170, 255, 255) #(150, 255, 255)
+		light_orange = (40, 100, 105) #(40, 100, 105) #(70, 180, 150)
+		dark_orange = (170, 255, 255) #(170, 255, 255) #(150, 255, 255)
+
+		# light_red = (252, 1, 2)
+		# dark_red = (255, 0, 0)
 		kernel = np.ones((7, 7), np.uint8)
 
 		filtered_img = cv2.dilate(cv2.erode(img, kernel, iterations=1), kernel, iterations=1)
@@ -116,6 +153,11 @@ class SensorPodIdentifier:
 			x, y, w, h = cv2.boundingRect(c)
 			boxes.append(((x, y), (x+w, y+h)))
 
+		cv2.rectangle(self.latest_image, bounding_box[0], bounding_box[1], (0, 255, 0),2)
+		cv2.imwrite("found_pod.jpg", self.latest_image)
+		# cv2.waitKey(0)
+		# cv2.destroyAllWindows()
+
 		return bounding_box
 
 	def get_sensor_pod_tip_pose(self):
@@ -125,7 +167,66 @@ class SensorPodIdentifier:
 		y = bounding_box[0][1]
 		z = 1
 
-		return (x, y, z)
+		return [x, y, z]
+	
+	def pose_to_matrix(pose):
+		# Convert the quaternion orientation to a rotation matrix
+		q = pose.pose.orientation
+		r = np.array([
+			[1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
+			[2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
+			[2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
+		])
+		
+		# Create a homogeneous transformation matrix from the rotation matrix
+		t = np.eye(4)
+		t[:3,:3] = r
+		
+		return t
+	
+
+	def object_callback(self, msg):
+        # Check if we have received the drone pose
+		if self.drone_pose is None:
+			rospy.logwarn('No drone pose received yet. Cannot transform object position.')
+			return
+
+        # Convert the position of the object to a numpy array
+		P_camera = np.array(self.get_sensor_pod_tip_pose()) #np.array([msg.point.x, msg.point.y, msg.point.z, 1.0])
+
+        # Convert the quaternion orientation of the drone to a rotation matrix
+		q = self.drone_pose.pose.orientation
+		r = np.array([
+            [1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
+            [2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
+            [2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
+        ])
+
+        # Create a homogeneous transformation matrix from the rotation matrix
+		t = np.eye(4)
+		t[:3,:3] = r
+
+        # Transform the position of the object from the camera frame to the drone frame
+		P_drone = np.dot(np.linalg.inv(t), P_camera)
+		P_drone = P_drone[:3] / P_drone[3]
+
+        # Add the position of the drone in the world frame to get the position of the object in the world frame
+		P_drone_world = np.array([self.drone_pose.pose.position.x, self.drone_pose.pose.position.y, self.drone_pose.pose.position.z])
+		P_world = P_drone[:3] + P_drone_world
+
+		# Create a PointStamped message for the position of the object in the drone frame
+		object_msg = PointStamped()
+		object_msg.header.frame_id = 'world'
+		object_msg.header.stamp = rospy.Time.now()
+		object_msg.point.x = P_world[0]
+		object_msg.point.y = P_world[1]
+		object_msg.point.z = P_world[2]
+
+		# Publish the position of the object in the drone frame
+		self.object_pub.publish(object_msg)
+
+		rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world[0], P_world[1], P_world[2]))
+
 
 	def publish_sensor_pod_tip_pose(self):
 		pod_tip = self.get_sensor_pod_tip_pose()

@@ -3,7 +3,7 @@ import numpy as np
 import pdb
 import sys
 import rospy
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, Range
 from geometry_msgs.msg import PoseStamped, PointStamped
 from cv_bridge import CvBridge
 import glob
@@ -35,13 +35,14 @@ class SensorPodIdentifier:
 		# for img in image_files:
 		# 	image_topic = os.path.splitext(os.path.basename(img))[0]
 		# 	self.subscriber = rospy.Subscriber(SensorPodIdentifier.IMAGE_TOPIC, Image, self.callback)
-		self.image_subscriber = rospy.Subscriber("/front_cam/camera/image", Image, self.callback)
+		self.image_subscriber = rospy.Subscriber("/front_cam/camera/image", Image, self.object_callback)
 		self.publisher = rospy.Publisher(POD_LOCATION_TOPIC, PoseStamped, queue_size=10)
 		self.subscriber = rospy.Subscriber('/ground_truth/state', Odometry, self.odom_callback)
 		self.range_sub = rospy.Subscriber('/sonar_height', Range, self.range_callback)
 		self.latest_image = None
 		self.bridge = CvBridge()
 		self.drone_pose = None
+		self.ground_dist = 0
 
 	def odom_callback(self, msg: Odometry) -> None:
 		"""
@@ -55,12 +56,15 @@ class SensorPodIdentifier:
         """
 		self.drone_pose = msg.pose.pose
 
-	def callback(self,  msg):
-		# self.latest_image = self.bridge.imgmsg_to_cv2(Image_data, "bgr8")
-		self.latest_image = self.bridge.imgmsg_to_cv2(msg)
+	def range_callback(self, msg) -> None:
+		self.ground_dist = msg.range
 
-		#print(self.cd_color_segmentation(self.latest_image))
-		# self.publish_sensor_pod_tip_pose()
+	# def callback(self,  msg):
+	# 	# self.latest_image = self.bridge.imgmsg_to_cv2(Image_data, "bgr8")
+	# 	self.latest_image = self.bridge.imgmsg_to_cv2(msg)
+
+	# 	#print(self.cd_color_segmentation(self.latest_image))
+	# 	# self.publish_sensor_pod_tip_pose()
 
 	# def image_callback(self, msg):
 	# 	# Convert ROS image message to OpenCV image
@@ -160,14 +164,14 @@ class SensorPodIdentifier:
 
 		return bounding_box
 
-	def get_sensor_pod_tip_pose(self):
-		img = self.get_latest_image()
-		bounding_box = self.cd_color_segmentation(img)
-		x = (bounding_box[0][0]+bounding_box[1][0])/2
-		y = bounding_box[0][1]
-		z = 1
+	# def get_sensor_pod_tip_pose(self):
+	# 	img = self.get_latest_image()
+	# 	bounding_box = self.cd_color_segmentation(img)
+	# 	x = (bounding_box[0][0]+bounding_box[1][0])/2
+	# 	y = bounding_box[0][1]
+	# 	z = 1
 
-		return [x, y, z]
+	# 	return [x, y, z]
 	
 	# def pose_to_matrix(pose):
 	# 	# Convert the quaternion orientation to a rotation matrix
@@ -186,13 +190,19 @@ class SensorPodIdentifier:
 	
 
 	def object_callback(self, msg):
+		img = self.bridge.imgmsg_to_cv2(msg)
+		bounding_box = self.cd_color_segmentation(img)
+		x = (bounding_box[0][0]+bounding_box[1][0])/2
+		y = bounding_box[0][1]
+		z = self.ground_dist
+
         # Check if we have received the drone pose
 		if self.drone_pose is None:
 			rospy.logwarn('No drone pose received yet. Cannot transform object position.')
 			return
 
         # Convert the position of the object to a numpy array
-		P_camera = np.array(self.get_sensor_pod_tip_pose()) #np.array([msg.point.x, msg.point.y, msg.point.z, 1.0])
+		P_camera = np.array([x, y, z]) #np.array([msg.point.x, msg.point.y, msg.point.z, 1.0])
 
         # Convert the quaternion orientation of the drone to a rotation matrix
 		q = self.drone_pose.pose.orientation

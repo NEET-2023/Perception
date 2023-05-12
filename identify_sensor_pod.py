@@ -62,21 +62,21 @@ class SensorPodIdentifier:
 		#print(self.cd_color_segmentation(self.latest_image))
 		self.publish_sensor_pod_tip_pose()
 
-	def image_callback(self, msg):
-		# Convert ROS image message to OpenCV image
-		cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-		# Convert image to grayscale
-		gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-		# Create April tag detector object
-		detector = Detector()
-		# Detect April tags in the image
-		tags = detector.detect(gray)
-		# Create April tag decoder object
-		decoder = apriltag.Detector()
-		# Decode the detected tag
-		tag_info = decoder.decode(gray, tags[0].tag_family)
-		# Print the tag ID
-		print("April tag ID:", tag_info[0].tag_id)
+	# def image_callback(self, msg):
+	# 	# Convert ROS image message to OpenCV image
+	# 	cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+	# 	# Convert image to grayscale
+	# 	gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+	# 	# Create April tag detector object
+	# 	detector = Detector()
+	# 	# Detect April tags in the image
+	# 	tags = detector.detect(gray)
+	# 	# Create April tag decoder object
+	# 	decoder = apriltag.Detector()
+	# 	# Decode the detected tag
+	# 	tag_info = decoder.decode(gray, tags[0].tag_family)
+	# 	# Print the tag ID
+	# 	print("April tag ID:", tag_info[0].tag_id)
 
 	def get_latest_image(self):
 		return self.latest_image
@@ -169,20 +169,20 @@ class SensorPodIdentifier:
 
 		return [x, y, z]
 	
-	def pose_to_matrix(pose):
-		# Convert the quaternion orientation to a rotation matrix
-		q = pose.pose.orientation
-		r = np.array([
-			[1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
-			[2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
-			[2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
-		])
+	# def pose_to_matrix(pose):
+	# 	# Convert the quaternion orientation to a rotation matrix
+	# 	q = pose.pose.orientation
+	# 	r = np.array([
+	# 		[1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
+	# 		[2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
+	# 		[2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
+	# 	])
 		
-		# Create a homogeneous transformation matrix from the rotation matrix
-		t = np.eye(4)
-		t[:3,:3] = r
+	# 	# Create a homogeneous transformation matrix from the rotation matrix
+	# 	t = np.eye(4)
+	# 	t[:3,:3] = r
 		
-		return t
+	# 	return t
 	
 
 	def object_callback(self, msg):
@@ -223,25 +223,25 @@ class SensorPodIdentifier:
 		object_msg.point.z = P_world[2]
 
 		# Publish the position of the object in the drone frame
-		self.object_pub.publish(object_msg)
+		self.publisher.publish(object_msg)
 
 		rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world[0], P_world[1], P_world[2]))
 
 
-	def publish_sensor_pod_tip_pose(self):
-		pod_tip = self.get_sensor_pod_tip_pose()
-		pose_msg = PoseStamped()
-		pose_msg.header.frame_id = "world"
-		pose_msg.pose.position.x = pod_tip[0]
-		pose_msg.pose.position.y = pod_tip[1]
-		pose_msg.pose.position.z = pod_tip[2]
-		pose_msg.pose.orientation.x = 0.0
-		pose_msg.pose.orientation.y = 0.0
-		pose_msg.pose.orientation.z = 0.0
-		pose_msg.pose.orientation.w = 1.0
+	# def publish_sensor_pod_tip_pose(self):
+	# 	pod_tip = self.get_sensor_pod_tip_pose()
+	# 	pose_msg = PoseStamped()
+	# 	pose_msg.header.frame_id = "world"
+	# 	pose_msg.pose.position.x = pod_tip[0]
+	# 	pose_msg.pose.position.y = pod_tip[1]
+	# 	pose_msg.pose.position.z = pod_tip[2]
+	# 	pose_msg.pose.orientation.x = 0.0
+	# 	pose_msg.pose.orientation.y = 0.0
+	# 	pose_msg.pose.orientation.z = 0.0
+	# 	pose_msg.pose.orientation.w = 1.0
 
-		rospy.loginfo(pose_msg)
-		self.publisher.publish(pose_msg)
+	# 	rospy.loginfo(pose_msg)
+	# 	self.publisher.publish(pose_msg)
 
 
 if __name__ == '__main__':

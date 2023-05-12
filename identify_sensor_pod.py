@@ -9,7 +9,7 @@ from cv_bridge import CvBridge
 import glob
 import os
 # from apriltag_ros import Detector
-import apriltag
+#import apriltag
 from nav_msgs.msg import Odometry
 
 #################### X-Y CONVENTIONS #########################
@@ -35,9 +35,10 @@ class SensorPodIdentifier:
 		# for img in image_files:
 		# 	image_topic = os.path.splitext(os.path.basename(img))[0]
 		# 	self.subscriber = rospy.Subscriber(SensorPodIdentifier.IMAGE_TOPIC, Image, self.callback)
-		# self.subscriber = rospy.Subscriber("/sensor_pod_0.jpg", Image, self.callback)
+		self.image_subscriber = rospy.Subscriber("/front_cam/camera/image", Image, self.callback)
 		self.publisher = rospy.Publisher(POD_LOCATION_TOPIC, PoseStamped, queue_size=10)
 		self.subscriber = rospy.Subscriber('/ground_truth/state', Odometry, self.odom_callback)
+		self.range_sub = rospy.Subscriber('/sonar_height', Range, self.range_callback)
 		self.latest_image = None
 		self.bridge = CvBridge()
 		self.drone_pose = None
@@ -54,13 +55,12 @@ class SensorPodIdentifier:
         """
 		self.drone_pose = msg.pose.pose
 
-	def callback(self): #, Image_data):
+	def callback(self,  msg):
 		# self.latest_image = self.bridge.imgmsg_to_cv2(Image_data, "bgr8")
-		self.latest_image = cv2.imread('frame0003.jpg')
-		print("got image")
+		self.latest_image = self.bridge.imgmsg_to_cv2(msg)
 
 		#print(self.cd_color_segmentation(self.latest_image))
-		self.publish_sensor_pod_tip_pose()
+		# self.publish_sensor_pod_tip_pose()
 
 	# def image_callback(self, msg):
 	# 	# Convert ROS image message to OpenCV image
@@ -245,11 +245,13 @@ class SensorPodIdentifier:
 
 
 if __name__ == '__main__':
+	try:
+		rospy.init_node('sensor_pod_identifier')
+		sensor_pod_identifier = SensorPodIdentifier()
+		rospy.spin()
+	except rospy.ROSInterruptException:
+		pass
 
-	rospy.init_node('sensor_pod_identifier')
-	sensor_pod_identifier = SensorPodIdentifier()
-	sensor_pod_identifier.callback()
-	rospy.spin()
 
 	# image_subscriber = SensorPodIdentifier()
 	# while not rospy.is_shutdown():

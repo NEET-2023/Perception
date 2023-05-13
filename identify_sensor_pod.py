@@ -193,34 +193,44 @@ class SensorPodIdentifier:
 
 		# Find remaning contours, correspond to orange objects
 		contours = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
-		largest_contour = self.get_largest_contour(contours)
 
-		# print("largest contour found")
+		if contours == []:
+			return None
+		
+		else:
+			largest_contour = self.get_largest_contour(contours)
 
-		# Draw boxes around the contours
-		x, y, w, h = cv2.boundingRect(largest_contour)
-		bounding_box = ((x, y), (x+w, y+h))
+			# print("largest contour found")
 
-		boxes = []
-		for c in contours:
-			x, y, w, h = cv2.boundingRect(c)
-			boxes.append(((x, y), (x+w, y+h)))
+			# Draw boxes around the contours
+			x, y, w, h = cv2.boundingRect(largest_contour)
+			bounding_box = ((x, y), (x+w, y+h))
 
-		# cv2.rectangle(self.latest_image, bounding_box[0], bounding_box[1], (0, 255, 0),2)
-		# cv2.imwrite("found_pod.jpg", self.latest_image)
-		# cv2.waitKey(0)
-		# cv2.destroyAllWindows()
+			boxes = []
+			for c in contours:
+				x, y, w, h = cv2.boundingRect(c)
+				boxes.append(((x, y), (x+w, y+h)))
 
-		return bounding_box
+			# cv2.rectangle(self.latest_image, bounding_box[0], bounding_box[1], (0, 255, 0),2)
+			# cv2.imwrite("found_pod.jpg", self.latest_image)
+			# cv2.waitKey(0)
+			# cv2.destroyAllWindows()
+
+			return bounding_box
 
 	def object_callback(self, msg):
 		img = self.bridge.imgmsg_to_cv2(msg)
 		bounding_box = self.cd_color_segmentation(img)
 		# print(bounding_box)
-		u = (bounding_box[0][0]+bounding_box[1][0])/2 - 320
-		v = (bounding_box[0][1]+bounding_box[1][1])/2 - 240
-		w = self.ground_dist
-
+		if bounding_box == None:
+			u = np.nan
+			v = np.nan
+			w = np.nan
+		
+		else:
+			u = (bounding_box[0][0]+bounding_box[1][0])/2 - 320
+			v = (bounding_box[0][1]+bounding_box[1][1])/2 - 240
+			w = self.ground_dist
 
 		# # Extrinsic matrix
 		# R_drone_world = tf.transformations.quaternion_matrix([self.drone_pose.orientation.x, self.drone_pose.orientation.y, self.drone_pose.orientation.z, self.drone_pose.orientation.w])[:3, :3]  # 3x3 rotation matrix

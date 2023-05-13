@@ -194,7 +194,7 @@ class SensorPodIdentifier:
 		# Find remaning contours, correspond to orange objects
 		contours = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
 
-		if contours == []:
+		if not contours:
 			return None
 		
 		else:

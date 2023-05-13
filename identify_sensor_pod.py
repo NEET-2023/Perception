@@ -46,7 +46,7 @@ class SensorPodIdentifier:
 		self.ground_dist = 0
 		self.K = np.array([[319.9988245765257, 0, 320.5], [0, 319.9988245765257, 240.5], [0, 0, 1]]) # intrinsics Matrix
 		self.P_camera_drone = np.array([0.05, 0, -0.25])
-		self.R_camera_drone = np.diag([0, np.pi/4, 0])
+		self.R_camera_drone = tf.transformations.euler_matrix(0, np.pi/4, 0)[:3, :3]
 
 	def odom_callback(self, msg: Odometry) -> None:
 		"""
@@ -160,7 +160,7 @@ class SensorPodIdentifier:
 		
 		p_drone_world = np.array([self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose.position.z])
 		p_camera_world = p_drone_world + R_drone_world @ self.P_camera_drone
-		T = np.concatenate([R_cam_world, p_camera_world], axis=1)
+		T = np.concatenate([np.concatenate([R_cam_world, p_camera_world[:, np.newaxis]], axis=1), np.array([[0, 0, 0, 1]])], axis=0)
 
 		# Normalize pixel coordinates
 		u_norm = (u - 320.5) / 319.9988245765257

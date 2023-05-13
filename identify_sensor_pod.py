@@ -44,6 +44,9 @@ class SensorPodIdentifier:
 		self.bridge = CvBridge()
 		self.drone_pose = None
 		self.ground_dist = 0
+		self.K = np.array([[319.9988245765257, 0, 320.5], [0, 319.9988245765257, 240.5], [0, 0, 1]]) # intrinsics Matrix
+		self.P_camera_drone = np.array([0.05, 0, -0.25])
+		self.R_camera_drone = np.diag([0, np.pi/4, 0])
 
 	def odom_callback(self, msg: Odometry) -> None:
 		"""
@@ -59,29 +62,6 @@ class SensorPodIdentifier:
 
 	def range_callback(self, msg) -> None:
 		self.ground_dist = msg.range
-
-	# def callback(self,  msg):
-	# 	# self.latest_image = self.bridge.imgmsg_to_cv2(Image_data, "bgr8")
-	# 	self.latest_image = self.bridge.imgmsg_to_cv2(msg)
-
-	# 	#print(self.cd_color_segmentation(self.latest_image))
-	# 	# self.publish_sensor_pod_tip_pose()
-
-	# def image_callback(self, msg):
-	# 	# Convert ROS image message to OpenCV image
-	# 	cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-	# 	# Convert image to grayscale
-	# 	gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-	# 	# Create April tag detector object
-	# 	detector = Detector()
-	# 	# Detect April tags in the image
-	# 	tags = detector.detect(gray)
-	# 	# Create April tag decoder object
-	# 	decoder = apriltag.Detector()
-	# 	# Decode the detected tag
-	# 	tag_info = decoder.decode(gray, tags[0].tag_family)
-	# 	# Print the tag ID
-	# 	print("April tag ID:", tag_info[0].tag_id)
 
 	def get_latest_image(self):
 		return self.latest_image
@@ -165,31 +145,6 @@ class SensorPodIdentifier:
 
 		return bounding_box
 
-	# def get_sensor_pod_tip_pose(self):
-	# 	img = self.get_latest_image()
-	# 	bounding_box = self.cd_color_segmentation(img)
-	# 	x = (bounding_box[0][0]+bounding_box[1][0])/2
-	# 	y = bounding_box[0][1]
-	# 	z = 1
-
-	# 	return [x, y, z]
-	
-	# def pose_to_matrix(pose):
-	# 	# Convert the quaternion orientation to a rotation matrix
-	# 	q = pose.pose.orientation
-	# 	r = np.array([
-	# 		[1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
-	# 		[2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
-	# 		[2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
-	# 	])
-		
-	# 	# Create a homogeneous transformation matrix from the rotation matrix
-	# 	t = np.eye(4)
-	# 	t[:3,:3] = r
-		
-	# 	return t
-	
-
 	def object_callback(self, msg):
 		img = self.bridge.imgmsg_to_cv2(msg)
 		bounding_box = self.cd_color_segmentation(img)
@@ -197,26 +152,15 @@ class SensorPodIdentifier:
 		v = bounding_box[0][1]
 		w = self.ground_dist
 
-        # Intrinsic matrix
-		K = np.array([[319.9988245765257, 0, 320.5],
-					[0, 319.9988245765257, 240.5],
-					[0, 0, 1]])
-
 		# Extrinsic matrix
-		R_drone = tf.transformations.quaternion_matrix([self.drone_pose.orientation.x, self.drone_pose.orientation.y, self.drone_pose.orientation.z, self.drone_pose.orientation.w])[:3, :3]  # 3x3 rotation matrix
-
-		# Define the y-axis rotation matrix
-		R_cam = np.array([[np.cos(np.pi/4), 0, np.sin(np.pi/4)],
-									[0, 1, 0],
-									[-np.sin(np.pi/4), 0, np.cos(np.pi/4)]])
+		R_drone_world = tf.transformations.quaternion_matrix([self.drone_pose.orientation.x, self.drone_pose.orientation.y, self.drone_pose.orientation.z, self.drone_pose.orientation.w])[:3, :3]  # 3x3 rotation matrix
 
 		# Rotate the original rotation matrix about the y-axis
+		R_cam_world = np.dot(R_drone_world, self.R_camera_drone)
 		
-		R_cam_world = np.dot(R_drone, R_cam)
-		
-		
-		t = [np.array([self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose.position.z]).T + np.array([0.05, 0.0, -0.25]).T]  # 3x1 translation vector
-		T = np.concatenate([R_cam_world, t], axis=1)
+		p_drone_world = np.array([self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose.position.z])
+		p_camera_world = p_drone_world + R_drone_world @ self.P_camera_drone
+		T = np.concatenate([R_cam_world, p_camera_world], axis=1)
 
 		# Normalize pixel coordinates
 		u_norm = (u - 320.5) / 319.9988245765257
@@ -243,7 +187,29 @@ class SensorPodIdentifier:
 
 		rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world[0], P_world[1], P_world[2]))
 
+	# def get_sensor_pod_tip_pose(self):
+	# 	img = self.get_latest_image()
+	# 	bounding_box = self.cd_color_segmentation(img)
+	# 	x = (bounding_box[0][0]+bounding_box[1][0])/2
+	# 	y = bounding_box[0][1]
+	# 	z = 1
 
+	# 	return [x, y, z]
+	
+	# def pose_to_matrix(pose):
+	# 	# Convert the quaternion orientation to a rotation matrix
+	# 	q = pose.pose.orientation
+	# 	r = np.array([
+	# 		[1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
+	# 		[2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
+	# 		[2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
+	# 	])
+		
+	# 	# Create a homogeneous transformation matrix from the rotation matrix
+	# 	t = np.eye(4)
+	# 	t[:3,:3] = r
+		
+	# 	return t
 
 
 	# def object_callback(self, msg):
@@ -309,6 +275,22 @@ class SensorPodIdentifier:
 
 	# 	rospy.loginfo(pose_msg)
 	# 	self.publisher.publish(pose_msg)
+
+	# def image_callback(self, msg):
+	# 	# Convert ROS image message to OpenCV image
+	# 	cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+	# 	# Convert image to grayscale
+	# 	gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+	# 	# Create April tag detector object
+	# 	detector = Detector()
+	# 	# Detect April tags in the image
+	# 	tags = detector.detect(gray)
+	# 	# Create April tag decoder object
+	# 	decoder = apriltag.Detector()
+	# 	# Decode the detected tag
+	# 	tag_info = decoder.decode(gray, tags[0].tag_family)
+	# 	# Print the tag ID
+	# 	print("April tag ID:", tag_info[0].tag_id)
 
 
 if __name__ == '__main__':

@@ -48,6 +48,72 @@ class SensorPodIdentifier:
 		self.P_camera_drone = np.array([0.05, 0, -0.25])
 		self.R_camera_drone = tf.transformations.euler_matrix(0, np.pi/4, 0)[:3, :3]
 
+		self.pts_image_plane = np.array([[406.0, 276.0], # airpod_left_bottom_corner
+                   [309.0, 240.0], # green_post-its_left_bottom_corner
+                   [317.0, 295.0], # contact_lenses_right_bottom_corner
+                   [234.0, 252.0]]) # matcha_pocky_box_right_bottom_corner
+		
+		self.pts_ground_plane = np.array([[14.375, -3.625],
+	                    [23.875, 1.3125],
+	                    [20.9375, 2.625],
+	                    [20.625, 8.625]])
+		
+		self.pts_ground_plane = self.pts_ground_plane
+		self.pts_ground_plane = np.float32(self.pts_ground_plane[:, np.newaxis, :])
+
+		self.pts_image_plane = self.pts_image_plane * 1.0
+		self.pts_image_plane = np.float32(self.pts_image_plane[:, np.newaxis, :])
+
+		self.h, err = cv2.findHomography(self.pts_image_plane, self.pts_ground_plane)
+
+	def callback(self, msg):
+		# other setup info 
+		img = self.bridge.imgmsg_to_cv2(msg)
+		bounding_box = self.cd_color_segmentation(img)
+		u = (bounding_box[0][0]+bounding_box[1][0])/2
+		v = bounding_box[0][1]
+		# w = self.ground_dist
+
+		#Call to main function
+		P_world_x, P_world_y = self.transformUvToXy(u, v)
+		P_world_z = 0 # solve
+
+		# Create a PointStamped message for the position of the object in the drone frame
+		object_msg = PointStamped()
+		object_msg.header.frame_id = 'world'
+		object_msg.header.stamp = rospy.Time.now()
+		object_msg.point.x = P_world_x
+		object_msg.point.y = P_world_y
+		object_msg.point.z = P_world_z
+
+		# Publish the position of the object in the drone frame
+		self.publisher.publish(object_msg)
+
+		rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(P_world_x, P_world_y, P_world_z))
+
+
+
+	def transformUvToXy(self, u, v):
+		"""
+		u and v are pixel coordinates.
+		The top left pixel is the origin, u axis increases to right, and v axis
+		increases down.
+
+		Returns a normal non-np 1x2 matrix of xy displacement vector from the
+		camera to the point on the ground plane.
+		Camera points along positive x axis and y axis increases to the left of
+		the camera.
+
+		Units are in meters.
+		"""
+		homogeneous_point = np.array([[u], [v], [1]])
+		xy = np.dot(self.h, homogeneous_point)
+		scaling_factor = 1.0 / xy[2, 0]
+		homogeneous_xy = xy * scaling_factor
+		x = homogeneous_xy[0, 0]
+		y = homogeneous_xy[1, 0]
+		return x, y
+
 	def odom_callback(self, msg: Odometry) -> None:
 		"""
         Saves in the odometry for the drone to conduct its planning

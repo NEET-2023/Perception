@@ -174,8 +174,10 @@ class SensorPodIdentifier:
 			"""
 
 		# Create mask for orange cone. HSV threshods
-		light_orange = (40, 100, 105) #(40, 100, 105) #(70, 180, 150)
-		dark_orange = (170, 255, 255) #(170, 255, 255) #(150, 255, 255)
+		# light_orange = (40, 100, 105) #(40, 100, 105) #(70, 180, 150)
+		# dark_orange = (170, 255, 255) #(170, 255, 255) #(150, 255, 255)
+		lower_bound = (0, 90, 0)
+		upper_bound = (180, 255, 255)
 
 		# light_red = (252, 1, 2)
 		# dark_red = (255, 0, 0)
@@ -186,7 +188,7 @@ class SensorPodIdentifier:
 
 		#image_print(filtered_img)
 		hsv_img = cv2.cvtColor(filtered_img, cv2.COLOR_RGB2HSV)
-		mask = cv2.inRange(hsv_img, light_orange, dark_orange)
+		mask = cv2.inRange(hsv_img, lower_bound, upper_bound)
 		# self.image_print(mask)
 
 		# Find remaning contours, correspond to orange objects
@@ -214,6 +216,7 @@ class SensorPodIdentifier:
 	def object_callback(self, msg):
 		img = self.bridge.imgmsg_to_cv2(msg)
 		bounding_box = self.cd_color_segmentation(img)
+		# print(bounding_box)
 		u = (bounding_box[0][0]+bounding_box[1][0])/2
 		v = (bounding_box[0][1]+bounding_box[1][1])/2
 		w = self.ground_dist
@@ -252,7 +255,7 @@ class SensorPodIdentifier:
 		# Publish the position of the object in the drone frame
 		self.publisher.publish(object_msg)
 
-		rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(u, v, w))
+		# rospy.loginfo('Object position in world frame: x = {}, y = {}, z = {}'.format(u, v, w))
 
 	# def get_sensor_pod_tip_pose(self):
 	# 	img = self.get_latest_image()

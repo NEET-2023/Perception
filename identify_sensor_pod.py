@@ -176,7 +176,7 @@ class SensorPodIdentifier:
 		# Create mask for orange cone. HSV threshods
 		# light_orange = (40, 100, 105) #(40, 100, 105) #(70, 180, 150)
 		# dark_orange = (170, 255, 255) #(170, 255, 255) #(150, 255, 255)
-		lower_bound = (0, 90, 0)
+		lower_bound = (40, 40, 40)
 		upper_bound = (180, 255, 255)
 
 		# light_red = (252, 1, 2)
@@ -217,8 +217,8 @@ class SensorPodIdentifier:
 		img = self.bridge.imgmsg_to_cv2(msg)
 		bounding_box = self.cd_color_segmentation(img)
 		# print(bounding_box)
-		u = (bounding_box[0][0]+bounding_box[1][0])/2
-		v = (bounding_box[0][1]+bounding_box[1][1])/2
+		u = (bounding_box[0][0]+bounding_box[1][0])/2 - 320
+		v = (bounding_box[0][1]+bounding_box[1][1])/2 - 240
 		w = self.ground_dist
 
 

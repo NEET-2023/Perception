@@ -22,6 +22,6 @@
         </collision>
     </link>
     <gazebo reference="pod">
-        <material>Gazebo/RedGlow</material>
+        <material>Gazebo/Green</material>
     </gazebo>
 </robot>

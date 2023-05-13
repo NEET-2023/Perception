@@ -215,7 +215,7 @@ class SensorPodIdentifier:
 		R_cam_world = np.dot(R_drone, R_cam)
 		
 		
-		t = np.array([self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose.position.z]).T + np.array([0.05, 0.0, -0.25]).T  # 3x1 translation vector
+		t = [np.array([self.drone_pose.position.x, self.drone_pose.position.y, self.drone_pose.position.z]).T + np.array([0.05, 0.0, -0.25]).T]  # 3x1 translation vector
 		T = np.concatenate([R_cam_world, t], axis=1)
 
 		# Normalize pixel coordinates

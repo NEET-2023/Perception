@@ -158,9 +158,9 @@ class SensorPodIdentifier:
 			new_area = cv2.contourArea(contour)
 			if new_area > largest_area:
 				x, y, w, h = cv2.boundingRect(contour)
-				if w/h < 1.25 and w/h > 0.75:
-					largest_area = new_area
-					largest_contour = contour
+				# if w/h < 1.25 and w/h > 0.75:
+				largest_area = new_area
+				largest_contour = contour
 		return largest_contour
 
 	def cd_color_segmentation(self, img):
